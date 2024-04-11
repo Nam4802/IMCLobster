@@ -58,22 +58,24 @@ class Trader:
             orders: List[Order] = []
 
             if product == "STARFRUIT":
-                acceptable_price = self.calc_price_ma(data_s)
+                buy_acceptable_price = self.calc_price_ma(data_s) - 1
+                sell_acceptable_price = self.calc_price_ma(data_s) + 1
             elif product == "AMETHYSTS":
-                acceptable_price = 10000
+                buy_acceptable_price = 9999
+                sell_acceptable_price = 10001
 
             #print("Acceptable price : " + str(acceptable_price))
             #print("Buy Order depth : " + str(len(order_depth.buy_orders)) + ", Sell order depth : " + str(len(order_depth.sell_orders)))
     
             if len(order_depth.sell_orders) != 0:
                 best_ask, best_ask_amount = list(order_depth.sell_orders.items())[0]
-                if int(best_ask) < (acceptable_price):
+                if int(best_ask) < (buy_acceptable_price):
                     print("BUY", str(-best_ask_amount) + "x", best_ask)
                     orders.append(Order(product, best_ask, -best_ask_amount))
     
             if len(order_depth.buy_orders) != 0:
                 best_bid, best_bid_amount = list(order_depth.buy_orders.items())[0]
-                if int(best_bid) > (acceptable_price):
+                if int(best_bid) > (sell_acceptable_price):
                     print("SELL", str(best_bid_amount) + "x", best_bid)
                     orders.append(Order(product, best_bid, -best_bid_amount))
             
