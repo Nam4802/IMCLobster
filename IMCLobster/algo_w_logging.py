@@ -122,7 +122,7 @@ class Trader:
 
         for product in order_depth:
             mid_price = (list(order_depth[product].sell_orders.keys())[0] + list(order_depth[product].buy_orders.keys())[0]) / 2
-            print(product + " current mid price : " + str(mid_price))
+            logger.print(product + " current mid price : " + str(mid_price))
 
             mid_price_all[product] = mid_price
 
