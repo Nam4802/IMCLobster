@@ -31,7 +31,7 @@ class Trader:
     # Calculate moving average
     def calc_price_ma(self, data):
 
-        MA_DUR = 10
+        MA_DUR = 20
         mavg = 0
 
         for i in range(min(len(data), MA_DUR)):
