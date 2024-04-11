@@ -113,24 +113,37 @@ logger = Logger()
 
 class Trader:
 
-    data = {'STARFRUIT':[5000], 'AMETHYSTS':[10000]}
+    data = {'STARFRUIT':[5040], 'AMETHYSTS':[10002]}
 
-    def current_price(self, order_depth):
+    # Function to just print a dict containing current mid price of all products
+    def mid_price(self, order_depth):
 
-        current_price_all = {}
+        mid_price_all = {}
 
         for product in order_depth:
-            current_price = list(order_depth[product].sell_orders.keys())[0]
-            logger.print(product + " current price : " + str(current_price))
+            mid_price = (list(order_depth[product].sell_orders.keys())[0] + list(order_depth[product].buy_orders.keys())[0]) / 2
+            print(product + " current mid price : " + str(mid_price))
 
-            current_price_all[product] = current_price
+            mid_price_all[product] = mid_price
 
-        return current_price_all
+        return mid_price_all
 
-
+    # Update data
     def update_data(self, order_depth):
         for product in order_depth:
-            Trader.data[product].append(list(order_depth[product].sell_orders.keys())[0])
+            mid_price = (list(order_depth[product].sell_orders.keys())[0] + list(order_depth[product].buy_orders.keys())[0]) / 2
+            Trader.data[product].append(mid_price)
+
+    # Calculate moving average
+    def calc_price_ma(self, data):
+
+        MA_DUR = 5
+        mavg = 0
+
+        for i in range(min(len(data), MA_DUR)):
+            mavg += data[-1 - i] / MA_DUR
+
+        return mavg
 
 
     def run(self, state: TradingState) -> tuple[dict[Symbol, list[Order]], int, str]:
@@ -144,7 +157,7 @@ class Trader:
 
         result = {}
 
-        self.current_price(state.order_depths)
+        self.mid_price(state.order_depths)
         self.update_data(state.order_depths)
 
         for product in state.order_depths:
@@ -152,10 +165,9 @@ class Trader:
             orders: List[Order] = []
 
             if product == "STARFRUIT":
-                acceptable_price = 5055
+                acceptable_price = self.calc_price_ma(data_s)
             elif product == "AMETHYSTS":
                 acceptable_price = 10000
-
 
             #print("Acceptable price : " + str(acceptable_price))
             #print("Buy Order depth : " + str(len(order_depth.buy_orders)) + ", Sell order depth : " + str(len(order_depth.sell_orders)))
@@ -175,7 +187,7 @@ class Trader:
             result[product] = orders
     
     
-        traderData = "" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
+        traderData = "SAMPLE" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
         trader_data = ''
         conversions = 0
         logger.flush(state, result, conversions, trader_data)
