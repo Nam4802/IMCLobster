@@ -58,11 +58,11 @@ class Trader:
             orders: List[Order] = []
 
             if product == "STARFRUIT":
-                buy_acceptable_price = self.calc_price_ma(data_s) - 1
-                sell_acceptable_price = self.calc_price_ma(data_s) + 1
+                buy_acceptable_price = self.calc_price_ma(data_s)
+                sell_acceptable_price = self.calc_price_ma(data_s)
             elif product == "AMETHYSTS":
-                buy_acceptable_price = 9999
-                sell_acceptable_price = 10001
+                buy_acceptable_price = 10000
+                sell_acceptable_price = 10000
 
             #print("Acceptable price : " + str(acceptable_price))
             #print("Buy Order depth : " + str(len(order_depth.buy_orders)) + ", Sell order depth : " + str(len(order_depth.sell_orders)))
