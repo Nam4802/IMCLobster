@@ -2,14 +2,14 @@ from datamodel import OrderDepth, UserId, TradingState, Order
 from typing import List, Dict
 import string
 
-POSITION_LIMIT = {"STARFRUIT" : 20, "AMETHYSTS" : 20}
-START_POSITION = {"STARFRUIT" : 0, "AMETHYSTS" : 0}
-MAKE_MARGIN = {"STARFRUIT" : 2, "AMETHYSTS" : 4}
-MAKE_VOL = {"STARFRUIT": 6, "AMETHYSTS": 6}
+POSITION_LIMIT = {"STARFRUIT" : 20, "AMETHYSTS" : 20, "ORCHIDS": 100}
+START_POSITION = {"STARFRUIT" : 0, "AMETHYSTS" : 0, "ORCHIDS": 0}
+MAKE_MARGIN = {"STARFRUIT" : 2, "AMETHYSTS" : 4, "ORCHIDS": 2}
+MAKE_VOL = {"STARFRUIT": 6, "AMETHYSTS": 6, "ORCHIDS": 6}
 
 class Trader:
 
-    data = {'STARFRUIT':[5040], 'AMETHYSTS':[10002]}
+    data = {'STARFRUIT':[5040], 'AMETHYSTS':[10002], "ORCHIDS": [1150]}
 
     # Function to just print a dict containing current mid price of all products
     def mid_price(self, order_depth):
@@ -18,7 +18,7 @@ class Trader:
 
         for product in order_depth:
             mid_price = (list(order_depth[product].sell_orders.keys())[0] + list(order_depth[product].buy_orders.keys())[0]) / 2
-            print(product + " current mid price : " + str(mid_price))
+            #print(product + " current mid price : " + str(mid_price))
 
             mid_price_all[product] = mid_price
 
@@ -137,11 +137,12 @@ class Trader:
     def run(self, state: TradingState):
 
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
-        print("Position: " + str(state.position))
+        #print("Position: " + str(state.position))
         #print("Observations: " + str(state.observations))
         data_s = Trader.data['STARFRUIT']
         data_a = Trader.data['AMETHYSTS']
-        print("Last prices: STARFRUIT: " + str(data_s[-1]) + ", AMETHYSTS: " + str(data_a[-1]))
+        data_o = Trader.data['ORCHIDS']
+        #print("Last prices: STARFRUIT: " + str(data_s[-1]) + ", AMETHYSTS: " + str(data_a[-1]))
 
         result = {}
 
@@ -161,6 +162,8 @@ class Trader:
                 take_price = self.calc_price_ma(data_s)
             elif product == "AMETHYSTS":
                 take_price = 10000
+            elif product == "ORCHIDS":
+                take_price == self.calc_price_ma(data_o)
         
             #[take_orders, make_position] = self.market_take(order_depth, product, prod_position, take_price)
             [take_orders, make_position] = self.basic_bns(order_depth, product, prod_position, take_price)
