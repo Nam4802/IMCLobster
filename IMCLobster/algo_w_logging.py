@@ -193,8 +193,6 @@ class Trader:
 
     def basic_bns(self, order_depth, product, position, take_price):
         basic_orders: list[Order] = []
-        best_ask = list(order_depth.sell_orders.keys())[0]
-        best_bid = list(order_depth.buy_orders.keys())[0]
 
         new_pos = position
 
@@ -207,7 +205,7 @@ class Trader:
         if len(order_depth.buy_orders) != 0:
             best_bid, best_bid_amount = list(order_depth.buy_orders.items())[0]
             if int(best_bid) > take_price:
-                new_pos -= best_ask_amount
+                new_pos -= best_bid_amount
                 basic_orders.append(Order(product, best_bid, -best_bid_amount))
 
         return basic_orders, new_pos

@@ -9,7 +9,7 @@ MAKE_VOL = {"STARFRUIT": 6, "AMETHYSTS": 6, "ORCHIDS": 6}
 
 class Trader:
 
-    data = {'STARFRUIT':[5040], 'AMETHYSTS':[10002], "ORCHIDS": [1150]}
+    data = {'STARFRUIT':[5040], 'AMETHYSTS':[10002], 'ORCHIDS': [1200]}
 
     # Function to just print a dict containing current mid price of all products
     def mid_price(self, order_depth):
@@ -28,16 +28,16 @@ class Trader:
     def update_data(self, order_depth):
         for product in order_depth:
             mid_price = (list(order_depth[product].sell_orders.keys())[0] + list(order_depth[product].buy_orders.keys())[0]) / 2
+            print('Mid-price ' + product + ': ' + str(mid_price))
             Trader.data[product].append(mid_price)
 
     # Calculate moving average
-    def calc_price_ma(self, data):
+    def calc_price_ma(self, data, ma_dur):
 
-        MA_DUR = 5
         mavg = 0
 
-        for i in range(min(len(data), MA_DUR)):
-            mavg += data[-1 - i] / MA_DUR
+        for i in range(min(len(data), ma_dur)):
+            mavg += data[-1 - i] / ma_dur
 
         return mavg
 
@@ -46,15 +46,13 @@ class Trader:
         new_pos = position
 
         for ask, vol in order_depth.sell_orders.items():
-            if ask < take_price and (new_pos - vol) < POSITION_LIMIT[product]:
+            if ask < take_price:
                 new_pos += min(POSITION_LIMIT[product] - new_pos, - vol)
-                new_pos += - vol
                 take_orders.append(Order(product, ask, min(POSITION_LIMIT[product] - new_pos, - vol)))
 
         for bid, vol in order_depth.buy_orders.items():
-            if bid > take_price and (new_pos - vol) > - POSITION_LIMIT[product]:
+            if bid > take_price:
                 new_pos -= min(new_pos + POSITION_LIMIT[product], vol)
-                new_pos -= vol
                 take_orders.append(Order(product, bid, - min(new_pos + POSITION_LIMIT[product], vol)))
 
         return take_orders, new_pos
@@ -62,8 +60,8 @@ class Trader:
 
     def market_make(self, order_depth, product, position, take_price, make_margin, make_vol):
         make_orders: list[Order] = []
-        best_ask = list(order_depth.sell_orders.keys())[0]
-        best_bid = list(order_depth.buy_orders.keys())[0]
+        #best_ask = list(order_depth.sell_orders.keys())[0]
+        #best_bid = list(order_depth.buy_orders.keys())[0]
 
         new_pos = position
 
@@ -87,24 +85,54 @@ class Trader:
 
     def basic_bns(self, order_depth, product, position, take_price):
         basic_orders: list[Order] = []
-        best_ask = list(order_depth.sell_orders.keys())[0]
-        best_bid = list(order_depth.buy_orders.keys())[0]
 
         new_pos = position
+
+        if len(order_depth.buy_orders) != 0:
+            best_bid, best_bid_amount = list(order_depth.buy_orders.items())[0]
+            if int(best_bid) > take_price:
+                new_pos -= best_bid_amount
+                basic_orders.append(Order(product, best_bid, -best_bid_amount))
 
         if len(order_depth.sell_orders) != 0:
             best_ask, best_ask_amount = list(order_depth.sell_orders.items())[0]
             if int(best_ask) < take_price:
                 new_pos += best_ask_amount
                 basic_orders.append(Order(product, best_ask, -best_ask_amount))
+
+        return basic_orders, new_pos
+
+    def orchid_conversion(self, order_depth, product, position, take_price, observation):
+        basic_orders: list[Order] = []
+        best_ask = list(order_depth.sell_orders.keys())[0]
+        best_bid = list(order_depth.buy_orders.keys())[0]
+        best_ask_duck = observation.conversionObservations[product].askPrice
+        best_bid_duck = observation.conversionObservations[product].bidPrice
+
+        new_pos = position
+        import_tar = observation.conversionObservations[product].importTariff
+        export_tar = observation.conversionObservations[product].exportTariff
+        tp_fee = observation.conversionObservations[product].transportFees
+
+        conv = 0
+
+        if len(order_depth.sell_orders) != 0:
+            best_ask, best_ask_amount = list(order_depth.sell_orders.items())[0]
+            if best_ask < (best_bid_duck - export_tar - tp_fee / ( - best_ask_amount)) and (new_pos + best_ask_amount) >= - POSITION_LIMIT[product]:
+                conv += best_ask_amount
+                basic_orders.append(Order(product, best_ask, - best_ask_amount))
+
+            #elif best_ask < take_price:
+            #    new_pos -= best_ask_amount
+            #    basic_orders.append(Order(product, best_ask, -best_ask_amount))
     
         if len(order_depth.buy_orders) != 0:
             best_bid, best_bid_amount = list(order_depth.buy_orders.items())[0]
-            if int(best_bid) > take_price:
-                new_pos -= best_ask_amount
-                basic_orders.append(Order(product, best_bid, -best_bid_amount))
+            if best_bid > (best_ask_duck + import_tar + tp_fee / best_bid_amount) and (new_pos + best_bid_amount) <= POSITION_LIMIT[product]:
+                conv += best_bid_amount
+                basic_orders.append(Order(product, best_bid, - best_bid_amount))
 
-        return basic_orders, new_pos
+        return basic_orders, new_pos, conv
             
 
 
@@ -137,8 +165,8 @@ class Trader:
     def run(self, state: TradingState):
 
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
-        #print("Position: " + str(state.position))
-        #print("Observations: " + str(state.observations))
+        print("Position: " + str(state.position))
+        print("Observations: " + str(state.observations))
         data_s = Trader.data['STARFRUIT']
         data_a = Trader.data['AMETHYSTS']
         data_o = Trader.data['ORCHIDS']
@@ -159,20 +187,24 @@ class Trader:
                 prod_position = state.position[product]
 
             if product == "STARFRUIT":
-                take_price = self.calc_price_ma(data_s)
+                take_price = self.calc_price_ma(data_s, 5)
             elif product == "AMETHYSTS":
                 take_price = 10000
             elif product == "ORCHIDS":
-                take_price == self.calc_price_ma(data_o)
+                take_price == self.calc_price_ma(data_o, 200)
         
-            #[take_orders, make_position] = self.market_take(order_depth, product, prod_position, take_price)
-            [take_orders, make_position] = self.basic_bns(order_depth, product, prod_position, take_price)
-
+            if product == "ORCHIDS" and len(state.observations.conversionObservations) != 0:
+                [take_orders, make_position, conv] = self.orchid_conversion(order_depth, product, prod_position, take_price, state.observations)
+            else:
+                [take_orders, make_position] = self.basic_bns(order_depth, product, prod_position, take_price)
+                conv = 0
+            
             orders += take_orders
 
-            make_orders = self.market_make(order_depth, product, make_position, take_price, MAKE_MARGIN[product], MAKE_VOL[product])
+            if product != "ORCHIDS":
+                make_orders = self.market_make(order_depth, product, make_position, take_price, MAKE_MARGIN[product], MAKE_VOL[product])
 
-            orders += make_orders
+                orders += make_orders
 
             #print("Acceptable price : " + str(acceptable_price))
             #print("Buy Order depth : " + str(len(order_depth.buy_orders)) + ", Sell order depth : " + str(len(order_depth.sell_orders)))
@@ -182,5 +214,5 @@ class Trader:
     
         traderData = "SAMPLE" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
         
-        conversions = 1
+        conversions = conv
         return result, conversions, traderData
