@@ -107,12 +107,54 @@
 
         for ask, vol in order_depth.sell_orders.items():
             if ask < take_price:
-                new_pos += min(POSITION_LIMIT[product] - new_pos, - vol)
+                
                 take_orders.append(Order(product, ask, min(POSITION_LIMIT[product] - new_pos, - vol)))
+                new_pos += min(POSITION_LIMIT[product] - new_pos, - vol)
 
         for bid, vol in order_depth.buy_orders.items():
             if bid > take_price:
-                new_pos -= min(new_pos + POSITION_LIMIT[product], vol)
+                
                 take_orders.append(Order(product, bid, - min(new_pos + POSITION_LIMIT[product], vol)))
+                new_pos -= min(new_pos + POSITION_LIMIT[product], vol)
 
         return take_orders, new_pos
+
+
+def calc_gift(self, all_order_depths, position):
+        gift_orders: list[Order] = []
+        choco_ord = all_order_depths["CHOCOLATE"]
+        strb_ord = all_order_depths["STRAWBERRIES"]
+        rose_ord = all_order_depths["ROSES"]
+        gift_ord = all_order_depths["GIFT_BASKET"]
+
+        new_pos = position
+
+        sell_gift_check = list(gift_ord.buy_orders.keys())[0] - 4 * list(choco_ord.sell_orders.keys())[0] - 6 * list(strb_ord.sell_orders.keys())[0] - list(rose_ord.sell_orders.keys())[0]
+
+        buy_gift_check = - (list(gift_ord.sell_orders.keys())[0] - 4 * list(choco_ord.buy_orders.keys())[0] - 6 * list(strb_ord.buy_orders.keys())[0] - list(rose_ord.buy_orders.keys())[0])
+
+        if sell_gift_check > 0:
+            best_bid, best_bid_amount = list(gift_ord.buy_orders.items())[0]
+
+            sell_vol = 1
+
+            gift_orders.append(Order("GIFT_BASKET", best_bid, - sell_vol))
+            gift_orders.append(Order("CHOCOLATE", list(choco_ord.sell_orders.keys())[0], 4 * sell_vol))
+            gift_orders.append(Order("STRAWBERRIES", list(strb_ord.sell_orders.keys())[0], 6 * sell_vol))
+            gift_orders.append(Order("ROSES", list(rose_ord.sell_orders.keys())[0], sell_vol))
+            
+            new_pos -= sell_vol
+
+        if buy_gift_check > 0 and len(gift_ord.sell_orders) != 0:
+            best_ask, best_ask_amount = list(gift_ord.sell_orders.items())[0]
+
+            buy_vol = 1
+
+            gift_orders.append(Order("GIFT_BASKET", best_ask, buy_vol))
+            gift_orders.append(Order("CHOCOLATE", list(choco_ord.buy_orders.keys())[0], - 4 * buy_vol))
+            gift_orders.append(Order("STRAWBERRIES", list(strb_ord.buy_orders.keys())[0], - 6 * buy_vol))
+            gift_orders.append(Order("ROSES", list(rose_ord.buy_orders.keys())[0], - buy_vol))
+
+            new_pos += buy_vol
+
+        return gift_orders, new_pos

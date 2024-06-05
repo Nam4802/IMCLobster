@@ -3,14 +3,14 @@ from typing import List, Dict
 import string
 import numpy as np
 
-POSITION_LIMIT = {"STARFRUIT" : 20, "AMETHYSTS" : 20, "ORCHIDS": 100, "CHOCOLATE": 250, "STRAWBERRIES": 350, "ROSES": 60, "GIFT_BASKET": 60}
-START_POSITION = {"STARFRUIT" : 0, "AMETHYSTS" : 0, "ORCHIDS": 0, "CHOCOLATE": 0, "STRAWBERRIES": 0, "ROSES": 0, "GIFT_BASKET": 0}
+POSITION_LIMIT = {"STARFRUIT" : 20, "AMETHYSTS" : 20, "ORCHIDS": 100, "CHOCOLATE": 250, "STRAWBERRIES": 350, "ROSES": 60, "GIFT_BASKET": 60, "COCONUT": 300, "COCONUT_COUPON": 600}
+START_POSITION = {"STARFRUIT" : 0, "AMETHYSTS" : 0, "ORCHIDS": 0, "CHOCOLATE": 0, "STRAWBERRIES": 0, "ROSES": 0, "GIFT_BASKET": 0, "COCONUT": 0, "COCONUT_COUPON": 0}
 MAKE_MARGIN = {"STARFRUIT" : 2, "AMETHYSTS" : 4}
 MAKE_VOL = {"STARFRUIT": 6, "AMETHYSTS": 6}
 
 class Trader:
 
-    data = {"STARFRUIT":[], "AMETHYSTS":[], "ORCHIDS": [], "CHOCOLATE": [], "STRAWBERRIES": [], "ROSES": [], "GIFT_BASKET": []}
+    data = {"STARFRUIT":[], "AMETHYSTS":[], "ORCHIDS": [], "CHOCOLATE": [], "STRAWBERRIES": [], "ROSES": [], "GIFT_BASKET": [], "GIFT_ITEMS": [], "COCONUT": [], "COCONUT_COUPON": []}
 
     # Function to just print a dict containing current mid price of all products
     def mid_price(self, order_depth):
@@ -31,6 +31,9 @@ class Trader:
             mid_price = (list(order_depth[product].sell_orders.keys())[0] + list(order_depth[product].buy_orders.keys())[0]) / 2
             Trader.data[product].append(mid_price)
 
+        mid_price_gift_item = 4 * Trader.data["CHOCOLATE"][-1] + 6 * Trader.data["STRAWBERRIES"][-1] + Trader.data["ROSES"][-1]
+        Trader.data["GIFT_ITEMS"].append(mid_price_gift_item)
+
     # Calculate moving average
     def calc_price_ma(self, data, ma_dur):
 
@@ -47,6 +50,27 @@ class Trader:
         std = np.std([data[i] for i in range(- min(len(data), std_dur), 0)])
 
         return std
+
+    def boll_score(self, data, ma_dur, std_dur):
+
+        ma = self.calc_price_std(data, ma_dur)
+        std = self.calc_price_std(data, std_dur)
+
+        score = (data[-1] - ma) / std
+
+        return score
+
+    def calc_plf_pred(self, data, plf_dur, pred_dur):
+        time = np.arange(min(len(data), plf_dur))
+        new_data = [data[i] for i in range(- min(len(data), plf_dur), 0)]
+
+        coeffs = np.polyfit(time, new_data, 4)
+
+        x_target = min(len(data), plf_dur) + pred_dur
+
+        y_target = coeffs[0] * x_target**4 + coeffs[1] * x_target**3 + coeffs[2] * x_target**2 + coeffs[3] * x_target + coeffs[4]
+
+        return y_target
 
     def market_make(self, order_depth, product, position, take_price, make_margin, make_vol):
         make_orders: list[Order] = []
@@ -65,12 +89,18 @@ class Trader:
 
         return make_orders
 
-    def basic_bns(self, order_depth, product, position, take_price):
+
+    def basic_bns(self, order_depth, product, position, take_price, action = "BOTH"):
         basic_orders: list[Order] = []
 
         new_pos = position
 
-        if len(order_depth.buy_orders) != 0:
+        if action == "BUY":
+            take_price = 99999999
+        if action == "SELL":
+            take_price = 0
+
+        if len(order_depth.buy_orders) != 0 and action != "BUY":
             best_bid, best_bid_amount = list(order_depth.buy_orders.items())[0]
             if int(best_bid) > take_price:
                 
@@ -79,7 +109,7 @@ class Trader:
                 new_pos -= min(new_pos + POSITION_LIMIT[product], best_bid_amount)
                 
 
-        if len(order_depth.sell_orders) != 0:
+        if len(order_depth.sell_orders) != 0 and action != "SELL":
             best_ask, best_ask_amount = list(order_depth.sell_orders.items())[0]
             if int(best_ask) < take_price:
                 
@@ -90,7 +120,7 @@ class Trader:
 
         return basic_orders, new_pos
 
-    def orchid_conversion(self, order_depth, product, position, take_price, observation):
+    def orchid_conversion(self, order_depth, product, position, observation):
         basic_orders: list[Order] = []
         best_ask = list(order_depth.sell_orders.keys())[0]
         best_bid = list(order_depth.buy_orders.keys())[0]
@@ -119,7 +149,7 @@ class Trader:
         return basic_orders, new_pos, conv
 
     def calc_gift(self, all_order_depths, position):
-        gift_orders: list[Order] = []
+        gift_orders = {"CHOCOLATE": [], "STRAWBERRIES": [], "ROSES": [], "GIFT_BASKET": []}
         choco_ord = all_order_depths["CHOCOLATE"]
         strb_ord = all_order_depths["STRAWBERRIES"]
         rose_ord = all_order_depths["ROSES"]
@@ -127,45 +157,101 @@ class Trader:
 
         new_pos = position
 
-        sell_gift_check = list(gift_ord.buy_orders.keys())[0] - 4 * list(choco_ord.sell_orders.keys())[0] - 6 * list(strb_ord.sell_orders.keys())[0] - list(rose_ord.sell_orders.keys())[0]
+        #gift_check = self.boll_score(Trader.data["GIFT_BASKET"], 10, 10) - self.boll_score(Trader.data["GIFT_ITEMS"], 10, 10)
+        gift_check = Trader.data["GIFT_BASKET"][-1] / Trader.data["GIFT_ITEMS"][-1]
+        #print(gift_check)
 
-        buy_gift_check = - (list(gift_ord.sell_orders.keys())[0] - 4 * list(choco_ord.buy_orders.keys())[0] - 6 * list(strb_ord.buy_orders.keys())[0] - list(rose_ord.buy_orders.keys())[0])
+        ratio_u = (self.calc_price_ma(Trader.data["GIFT_BASKET"], 250) + self.calc_price_std(Trader.data["GIFT_BASKET"], 150)) / self.calc_price_ma(Trader.data["GIFT_ITEMS"], 250)
+        ratio_l = (self.calc_price_ma(Trader.data["GIFT_BASKET"], 250) - self.calc_price_std(Trader.data["GIFT_BASKET"], 150)) / self.calc_price_ma(Trader.data["GIFT_ITEMS"], 250)
+        #ratio = 0
+        #for i in range(- 10, 0):
+        #    ratio += (Trader.data["GIFT_BASKET"][i] / Trader.data["GIFT_ITEMS"][i]) / 10
 
-        if sell_gift_check > 0 and len(gift_ord.buy_orders) != 0:
-            best_bid, best_bid_amount = list(gift_ord.buy_orders.items())[0]
+        #ratio = 1.0059
 
-            sell_vol = min(new_pos + POSITION_LIMIT["GIFT_BASKET"], best_bid_amount)
+        if gift_check > ratio_u:
+            best_bid_gift, best_bid_vol_gift = list(gift_ord.buy_orders.items())[0]
+            best_ask_choco, best_ask_vol_choco = list(choco_ord.sell_orders.items())[0]
+            best_ask_strb, best_ask_vol_strb = list(strb_ord.sell_orders.items())[0]
+            best_ask_rose, best_ask_vol_rose = list(rose_ord.sell_orders.items())[0]
 
-            gift_orders.append(Order("GIFT_BASKET", best_bid, - sell_vol))
-            gift_orders.append(Order("CHOCOLATE", list(choco_ord.sell_orders.keys())[0], 4 * sell_vol))
-            gift_orders.append(Order("STRAWBERRIES", list(strb_ord.sell_orders.keys())[0], 6 * sell_vol))
-            gift_orders.append(Order("ROSES", list(rose_ord.sell_orders.keys())[0], sell_vol))
+            lim_vol = min(best_bid_vol_gift, round(- best_ask_vol_choco / 4), round(- best_ask_vol_strb / 6), - best_ask_vol_rose, POSITION_LIMIT["GIFT_BASKET"] + new_pos)
+
+            gift_orders["GIFT_BASKET"].append(Order("GIFT_BASKET", best_bid_gift, - lim_vol))
+            gift_orders["CHOCOLATE"].append(Order("CHOCOLATE", best_ask_choco, 4 * lim_vol))
+            gift_orders["STRAWBERRIES"].append(Order("STRAWBERRIES", best_ask_strb, 6 * lim_vol))
+            gift_orders["ROSES"].append(Order("ROSES", best_ask_rose, lim_vol))
             
-            new_pos -= sell_vol
+            new_pos -= lim_vol
 
-        if buy_gift_check > 0 and len(gift_ord.sell_orders) != 0:
-            best_ask, best_ask_amount = list(gift_ord.sell_orders.items())[0]
+        if gift_check < ratio_l:
+            best_ask_gift, best_ask_vol_gift = list(gift_ord.sell_orders.items())[0]
+            best_bid_choco, best_bid_vol_choco = list(choco_ord.buy_orders.items())[0]
+            best_bid_strb, best_bid_vol_strb = list(strb_ord.buy_orders.items())[0]
+            best_bid_rose, best_bid_vol_rose = list(rose_ord.buy_orders.items())[0]
 
-            buy_vol = min(POSITION_LIMIT["GIFT_BASKET"] - new_pos, - best_ask_amount)
+            lim_vol = min(- best_ask_vol_gift, round(best_bid_vol_choco / 4), round(best_bid_vol_strb / 6), best_bid_vol_rose, POSITION_LIMIT["GIFT_BASKET"] - new_pos)
 
-            gift_orders.append(Order("GIFT_BASKET", best_ask, buy_vol))
-            gift_orders.append(Order("CHOCOLATE", list(choco_ord.buy_orders.keys())[0], - 4 * buy_vol))
-            gift_orders.append(Order("STRAWBERRIES", list(strb_ord.buy_orders.keys())[0], - 6 * buy_vol))
-            gift_orders.append(Order("ROSES", list(rose_ord.buy_orders.keys())[0], - buy_vol))
+            gift_orders["GIFT_BASKET"].append(Order("GIFT_BASKET", best_ask_gift, lim_vol))
+            gift_orders["CHOCOLATE"].append(Order("CHOCOLATE", best_bid_choco, - 4 * lim_vol))
+            gift_orders["STRAWBERRIES"].append(Order("STRAWBERRIES", best_bid_strb, - 6 * lim_vol))
+            gift_orders["ROSES"].append(Order("ROSES", best_bid_rose, - lim_vol))
 
-            new_pos += buy_vol
+            new_pos += lim_vol
 
         return gift_orders, new_pos
 
+    def calc_coco(self, all_order_depths, position):
+        coco_orders = {"COCONUT": [], "COCONUT_COUPON": []}
+        coup_ord = all_order_depths["COCONUT_COUPON"]
+        coco_ord = all_order_depths["COCONUT"]
+
+        coup_price = Trader.data["COCONUT_COUPON"][-1]
+        coco_price = Trader.data["COCONUT"][-1]
+
+        new_pos = position
+
+        pnl_check = (self.calc_plf_pred(Trader.data["COCONUT"], 250, 250) - 10000) - (coup_price - coco_price)
+        coco_check = coco_price - self.calc_plf_pred(Trader.data["COCONUT"], 250, 250)
+
+        if pnl_check > 0 and coco_check > 0:
+            best_ask_coup, best_ask_vol_coup = list(coup_ord.sell_orders.items())[0]
+            best_bid_coco, best_bid_vol_coco = list(coco_ord.buy_orders.items())[0]
+            lim_vol = min(- best_ask_vol_coup, best_bid_vol_coco, POSITION_LIMIT["COCONUT_COUPON"] - new_pos)
+            coco_orders["COCONUT_COUPON"].append(Order("COCONUT_COUPON", best_ask_coup, lim_vol))
+            coco_orders["COCONUT"].append(Order("COCONUT", best_bid_coco, - lim_vol))
+        if pnl_check > 0 and coco_check < 0:
+            best_ask_coup, best_ask_vol_coup = list(coup_ord.sell_orders.items())[0]
+            best_ask_coco, best_ask_vol_coco = list(coco_ord.sell_orders.items())[0]
+            lim_vol = min(- best_ask_vol_coup, - best_ask_vol_coco, POSITION_LIMIT["COCONUT_COUPON"] - new_pos)
+            coco_orders["COCONUT_COUPON"].append(Order("COCONUT_COUPON", best_ask_coup, lim_vol))
+            coco_orders["COCONUT"].append(Order("COCONUT", best_ask_coco, lim_vol))
+        if pnl_check < 0 and coco_check < 0:
+            best_bid_coup, best_bid_vol_coup = list(coco_ord.buy_orders.items())[0]
+            best_ask_coco, best_ask_vol_coco = list(coco_ord.sell_orders.items())[0]
+            lim_vol = min(- best_ask_vol_coco, best_bid_vol_coup, POSITION_LIMIT["COCONUT_COUPON"] + new_pos)
+            coco_orders["COCONUT_COUPON"].append(Order("COCONUT_COUPON", best_bid_coup, - lim_vol))
+            coco_orders["COCONUT"].append(Order("COCONUT", best_ask_coco, lim_vol))
+        if pnl_check < 0 and coco_check > 0:
+            best_bid_coup, best_bid_vol_coup = list(coco_ord.buy_orders.items())[0]
+            best_bid_coco, best_bid_vol_coco = list(coco_ord.buy_orders.items())[0]
+            lim_vol = min(best_bid_vol_coco, best_bid_vol_coup, POSITION_LIMIT["COCONUT_COUPON"] + new_pos)
+            coco_orders["COCONUT_COUPON"].append(Order("COCONUT_COUPON", best_bid_coup, - lim_vol))
+            coco_orders["COCONUT"].append(Order("COCONUT", best_bid_coco, - lim_vol))
+        return coco_orders, new_pos
+
+
     def run(self, state: TradingState):
 
+
         # Only method required. It takes all buy and sell orders for all symbols as an input, and outputs a list of orders to be sent
-        print("Position: " + str(state.position))
-        print("Observations: " + str(state.observations))
+        #print("Position: " + str(state.position))
+        #print("Observations: " + str(state.observations))
 
         self.update_data(state.order_depths)
 
         result = {}
+        conversions = 0
 
         for product in state.order_depths:
             order_depth: OrderDepth = state.order_depths[product]
@@ -180,37 +266,28 @@ class Trader:
                 take_price = 10000
             elif product == "STARFRUIT":
                 take_price = self.calc_price_ma(Trader.data[product], 5)
-            elif product == "STRAWBERRIES":
-                take_price = self.calc_price_ma(Trader.data[product], 100)
-            elif product == "ORCHIDS": 
-                take_price = self.calc_price_ma(Trader.data[product], 200)
-            else:
-                take_price = self.calc_price_ma(Trader.data[product], 250)
-
-                conv = 0
         
             if product == "ORCHIDS" and len(state.observations.conversionObservations) != 0:
-                [take_orders, make_position, conv] = self.orchid_conversion(order_depth, product, prod_position, take_price, state.observations)
+                [take_orders, make_position, conv] = self.orchid_conversion(order_depth, product, prod_position, state.observations)
                 orders += take_orders
-            #elif product == "GIFT_BASKET":
-            #    [gift_orders, take_position] = self.calc_gift(state.order_depths, prod_position)
-            #    [take_orders, make_position] = self.basic_bns(order_depth, product, take_position, take_price)
-            #    orders += gift_orders
-            #    orders += take_orders
-                
-            elif product in ["STARFRUIT", "AMETHYSTS"]:
+                conversions = conv
+                result[product] = orders
+            if product == "GIFT_BASKET" and state.timestamp >= 1000:
+                [gift_orders, gift_position] = self.calc_gift(state.order_depths, prod_position)
+                #result[product] = gift_orders[product]
+                for items in gift_orders.keys():
+                    result[items] = gift_orders[items]
+            if product == "COCONUT_COUPON" and state.timestamp >= 1000:
+                [coco_orders, gift_position] = self.calc_coco(state.order_depths, prod_position)
+                for items in coco_orders.keys():
+                    result[items] = coco_orders[items]
+            if product in ["STARFRUIT", "AMETHYSTS"]:
                 [take_orders, make_position] = self.basic_bns(order_depth, product, prod_position, take_price)
                 make_orders = self.market_make(order_depth, product, prod_position, take_price, MAKE_MARGIN[product], MAKE_VOL[product])
                 orders += take_orders
                 orders += make_orders
-            else:
-                [take_orders, make_position] = self.basic_bns(order_depth, product, prod_position, take_price)
-                orders += take_orders
-    
-            result[product] = orders
-    
+                result[product] = orders
     
         traderData = "SAMPLE" # String value holding Trader state data required. It will be delivered as TradingState.traderData on next execution.
 
-        conversions = conv
         return result, conversions, traderData

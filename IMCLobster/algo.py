@@ -169,7 +169,13 @@ class Trader:
     def calc_plf_pred(self, data, plf_dur, pred_dur):
         time = np.arange(min(len(data), plf_dur))
         new_data = [data[i] for i in range(- min(len(data), plf_dur), 0)]
-   
+
+        #coeffs = np.polyfit(time, new_data, 5)
+
+        #x_target = min(len(data), plf_dur) + pred_dur
+
+        #y_target = coeffs[0] * x_target**5 + coeffs[1] * x_target**4 + coeffs[2] * x_target**3 + coeffs[3] * x_target**2 + coeffs[4] * x_target + coeffs[5]
+        
         coeffs = np.polyfit(time, new_data, 3)
 
         x_target = min(len(data), plf_dur) + pred_dur
@@ -399,4 +405,3 @@ class Trader:
         logger.flush(state, result, conversions, trader_data)
 
         return result, conversions, trader_data
-

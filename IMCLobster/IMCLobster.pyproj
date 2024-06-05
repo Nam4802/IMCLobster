@@ -25,6 +25,7 @@
     <Compile Include="IMCLobster.py" />
     <Compile Include="datamodel.py" />
     <Compile Include="backtester.py" />
+    <Compile Include="algo.py" />
     <Compile Include="test.py" />
     <Compile Include="algo_w_logging.py" />
   </ItemGroup>
